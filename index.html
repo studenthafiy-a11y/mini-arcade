@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arcade Hub</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+        body { 
+            background: #111; 
+            color: #fff; 
+            font-family: monospace; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            height: 100vh; 
+            overflow: hidden; 
+        }
+        h1 { 
+            color: #f1c40f; 
+            font-size: 36px; 
+            margin-bottom: 40px; 
+            text-shadow: 0 0 15px rgba(241, 196, 15, 0.5); 
+            text-align: center;
+        }
+        .menu-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+            max-width: 320px;
+            padding: 0 20px;
+        }
+        .menu-btn {
+            display: block;
+            width: 100%;
+            padding: 20px;
+            text-align: center;
+            text-decoration: none;
+            font-size: 22px;
+            font-weight: bold;
+            border-radius: 8px;
+            transition: transform 0.1s, filter 0.1s;
+        }
+        .menu-btn:active {
+            transform: scale(0.95);
+            filter: brightness(0.8);
+        }
+        
+        /* Game Specific Colors */
+        .btn-slugger { background: #e74c3c; color: #fff; box-shadow: 0 6px 0 #c0392b; }
+        .btn-mario { background: #ff3d00; color: #fff; box-shadow: 0 6px 0 #dd2c00; }
+        .btn-racing { background: #00e5ff; color: #000; box-shadow: 0 6px 0 #00b8d4; }
+        
+        .menu-btn:active {
+            box-shadow: 0 0 0 transparent;
+            transform: translateY(6px);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>ARCADE HUB</h1>
+
+    <div class="menu-container">
+        <a href="slugger.html" class="menu-btn btn-slugger">METAL SLUGGER</a>
+        <a href="mario.html" class="menu-btn btn-mario">SUPER RUNNER</a>
+        <a href="racing.html" class="menu-btn btn-racing">NEON RACER</a>
+    </div>
+
+</body>
+</html>
