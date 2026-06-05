@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Star Striker</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+        body { background: #0b0b1a; color: #fff; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; position: relative; }
+        #game-wrap { position: relative; width: 100%; max-width: 800px; aspect-ratio: 16/9; background: #020208; }
+        canvas { width: 100%; height: 100%; display: block; border: 3px solid #3f51b5; box-shadow: 0 0 15px rgba(63, 81, 181, 0.5); }
+        #overlay { position: absolute; top:0; left:0; width:100%; height:100%; background:rgba(2,2,8,0.85); display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:10; }
+        button { padding: 12px 24px; font-size: 18px; font-weight:bold; background:#00e676; color:#000; border:none; border-radius:4px; cursor:pointer; margin-top: 10px; box-shadow: 0 0 10px #00e676; }
+        #ui { position: absolute; top: 10px; left: 15px; font-size: 18px; font-weight: bold; color: #00e5ff; text-shadow: 2px 2px 0 #000; pointer-events: none; }
+        #controls { width: 100%; max-width: 800px; display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #111; border-top: 2px solid #333; }
+        .d-pad { display: grid; grid-template-columns: repeat(3, 55px); grid-template-rows: repeat(2, 50px); gap: 5px; }
+        .btn { background: #333; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 20px; font-weight: bold; color:#fff; box-shadow: 0 3px 0 #222; }
+        .btn:active { background: #00e5ff; color: #000; transform: translateY(2px); box-shadow: none; }
+        #btn-fire { width: 80px; height: 80px; background: #ff1744; border-radius: 50%; font-size: 28px; box-shadow: 0 5px 0 #b2102f; }
+        #btn-fire:active { background: #ff5252; transform: translateY(4px); box-shadow: none; }
+    </style>
+</head>
+<body>
+
+    <a href="index.html" style="position: absolute; top: 10px; right: 10px; background: #3f51b5; color: #fff; padding: 8px 12px; text-decoration: none; font-weight: bold; border-radius: 5px; z-index: 1000; box-shadow: 0 0 8px #3f51b5;">⬅ MENU</a>
+
+    <div id="game-wrap">
+        <div id="ui">SCORE: <span id="score">0</span> | LEVEL: <span id="level">1</span></div>
+        <canvas id="game"></canvas>
+        <div id="overlay">
+            <h1 id="msg" style="color:#00e5ff; margin-bottom:10px; text-shadow: 0 0 10px #00e5ff;">STAR STRIKER</h1>
+            <button id="btn-start">LAUNCH JET</button>
+        </div>
+    </div>
+
+    <div id="controls">
+        <div class="d-pad">
+            <div style="grid-column: 2" class="btn" id="btn-up">▲</div>
+            <div style="grid-column: 1; grid-row: 2" class="btn" id="btn-left">◀</div>
+            <div style="grid-column: 2; grid-row: 2" class="btn" id="btn-down">▼</div>
+            <div style="grid-column: 3; grid-row: 2" class="btn" id="btn-right">▶</div>
+        </div>
+        <div class="action-btns">
+            <div class="btn" id="btn-fire">🔥</div>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 800; canvas.height = 450;
+
+    let player, bullets, enemies, stars;
+    let score = 0, level = 1, running = false, frameCount = 0;
+    let keys = { up: false, down: false, left: false, right: false };
+
+    let audioCtx = null;
+    function initAudio() {
+        if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+    }
+    function playSfx(type) {
+        if(!audioCtx) return;
+        let o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        let now = audioCtx.currentTime;
+        o.connect(g); g.connect(audioCtx.destination);
+        if (type === 'shoot') {
+            o.type = 'triangle'; o.frequency.setValueAtTime(600, now); o.frequency.exponentialRampToValueAtTime(150, now + 0.15);
+            g.gain.setValueAtTime(0.15, now); g.gain.linearRampToValueAtTime(0.01, now + 0.15);
+            o.start(now); o.stop(now + 0.15);
+        } else if (type === 'boom') {
+            o.type = 'sawtooth'; o.frequency.setValueAtTime(100, now); o.frequency.linearRampToValueAtTime(10, now + 0.25);
+            g.gain.setValueAtTime(0.3, now); g.gain.linearRampToValueAtTime(0.01, now + 0.25);
+            o.start(now); o.stop(now + 0.25);
+        } else if (type === 'level') {
+            o.type = 'sine'; o.frequency.setValueAtTime(587, now); o.frequency.setValueAtTime(698, now + 0.1); o.frequency.setValueAtTime(880, now + 0.2);
+            g.gain.setValueAtTime(0.2, now); g.gain.linearRampToValueAtTime(0.01, now + 0.4);
+            o.start(now); o.stop(now + 0.4);
+        }
+    }
+
+    class Jet {
+        constructor() {
+            this.w = 40; this.h = 25; this.x = 80; this.y = canvas.height / 2; this.speed = 6;
+        }
+        update() {
+            if (keys.up) this.y -= this.speed;
+            if (keys.down) this.y += this.speed;
+            if (keys.left) this.x -= this.speed;
+            if (keys.right) this.x += this.speed;
+            
+            if (this.x < 10) this.x = 10;
+            if (this.x > canvas.width - this.w - 50) this.x = canvas.width - this.w - 50;
+            if (this.y < 10) this.y = 10;
+            if (this.y > canvas.height - this.h - 10) this.y = canvas.height - this.h - 10;
+        }
+        draw() {
+            ctx.fillStyle = '#00e5ff';
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x + this.w, this.y + this.h / 2);
+            ctx.lineTo(this.x, this.y + this.h);
+            ctx.lineTo(this.x + 8, this.y + this.h / 2);
+            ctx.closePath();
+            ctx.fill();
+            // Engine Thruster Glow
+            ctx.fillStyle = '#ff9100';
+            ctx.fillRect(this.x - 5, this.y + this.h / 2 - 2, 6, 4);
+        }
+        shoot() {
+            bullets.push({ x: this.x + this.w, y: this.y + this.h / 2 - 2, w: 12, h: 4, vx: 14 });
+            playSfx('shoot');
+        }
+    }
+
+    function initGame() {
+        initAudio(); player = new Jet(); bullets = []; enemies = []; stars = [];
+        for(let i=0; i<40; i++) stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, size: Math.random()*2, speed: Math.random()*2 + 1});
+        score = 0; level = 1; frameCount = 0; running = true;
+        document.getElementById('score').innerText = score;
+        document.getElementById('level').innerText = level;
+        document.getElementById('overlay').style.display = 'none';
+        loop();
+    }
+
+    function update() {
+        player.update(); frameCount++;
+        
+        stars.forEach(s => { s.x -= s.speed; if(s.x < 0) s.x = canvas.width; });
+
+        let spawnRate = Math.max(20, 70 - (level * 8));
+        if (frameCount % spawnRate === 0) {
+            let speed = 3 + (level * 0.6);
+            enemies.push({ x: canvas.width, y: 20 + Math.random() * (canvas.height - 60), w: 32, h: 28, vx: -speed });
+        }
+
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            bullets[i].x += bullets[i].vx;
+            if (bullets[i].x > canvas.width) bullets.splice(i, 1);
+        }
+
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            let e = enemies[i]; e.x += e.vx;
+            if (e.x < -e.w) enemies.splice(i, 1);
+            
+            // Enemy vs Player collision
+            if (player.x < e.x + e.w && player.x + player.w > e.x && player.y < e.y + e.h && player.y + player.h > e.y) {
+                gameOver();
+            }
+        }
+
+        // Bullet vs Enemy collision engine
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            for (let j = enemies.length - 1; j >= 0; j--) {
+                let b = bullets[i], e = enemies[j];
+                if (b && e) {
+                    if (b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
+                        playSfx('boom');
+                        bullets.splice(i, 1);
+                        enemies.splice(j, 1);
+                        score += 10;
+                        document.getElementById('score').innerText = score;
+                        if (score > 0 && score % 100 === 0) {
+                            level++;
+                            playSfx('level');
+                            document.getElementById('level').innerText = level;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Starfield
+        ctx.fillStyle = '#fff';
+        stars.forEach(s => ctx.fillRect(s.x, s.y, s.size, s.size));
+
+        player.draw();
+        
+        // Laser Projectiles
+        ctx.fillStyle = '#00e676';
+        bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+        
+        // Alien Invaders
+        enemies.forEach(e => {
+            ctx.fillStyle = '#ff1744';
+            ctx.fillRect(e.x, e.y + 6, e.w, e.h - 12);
+            ctx.fillRect(e.x + 8, e.y, e.w - 16, e.h);
+        });
+    }
+
+    function loop() { if (!running) return; update(); draw(); requestAnimationFrame(loop); }
+    function gameOver() { playSfx('boom'); running = false; document.getElementById('msg').innerText = "JET DESTROYED"; document.getElementById('overlay').style.display = 'flex'; }
+
+    const bindControl = (id, key, state) => {
+        const el = document.getElementById(id);
+        el.addEventListener('touchstart', e => { e.preventDefault(); if(key==='fire') player.shoot(); else keys[key] = state; });
+        el.addEventListener('touchend', e => { e.preventDefault(); if(key!=='fire') keys[key] = !state; });
+        el.addEventListener('mousedown', e => { if(key==='fire') player.shoot(); else keys[key] = state; });
+        el.addEventListener('mouseup', e => { if(key!=='fire') keys[key] = !state; });
+    };
+    bindControl('btn-up', 'up', true); bindControl('btn-down', 'down', true);
+    bindControl('btn-left', 'left', true); bindControl('btn-right', 'right', true);
+    bindControl('btn-fire', 'fire', true);
+
+    document.getElementById('btn-start').addEventListener('click', initGame);
+    document.getElementById('btn-start').addEventListener('touchstart', e => { e.preventDefault(); initGame(); });
+
+    document.addEventListener('keydown', e => {
+        if(e.key === 'ArrowUp' || e.key === 'w') keys.up = true;
+        if(e.key === 'ArrowDown' || e.key === 's') keys.down = true;
+        if(e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
+        if(e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
+        if(e.key === ' ' || e.key === 'Shift') { if(!keys.fireLock) { player.shoot(); keys.fireLock = true; } }
+    });
+    document.addEventListener('keyup', e => {
+        if(e.key === 'ArrowUp' || e.key === 'w') keys.up = false;
+        if(e.key === 'ArrowDown' || e.key === 's') keys.down = false;
+        if(e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
+        if(e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
+        if(e.key === ' ' || e.key === 'Shift') keys.fireLock = false;
+    });
+</script>
+</body>
+</html>
